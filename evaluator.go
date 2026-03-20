@@ -12,8 +12,8 @@ import (
 	neturl "net/url"
 	"os"
 	"strings"
-	"time"
 	"sync"
+	"time"
 )
 
 const (
@@ -111,8 +111,8 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 	if err == nil {
 		if err := a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err(); err != nil {
 			safeFlag := sanitizeForLog(flagName)
-	// #nosec G706 -- valor sanitizado para log
-	log.Printf("erro ao gravar cache para flag %s: %v", safeFlag, err)
+			// #nosec G706 -- valor sanitizado para log
+			log.Printf("erro ao gravar cache para flag %s: %v", safeFlag, err)
 		}
 	}
 
