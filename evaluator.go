@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"sync"
 )
 
 const (
@@ -93,9 +94,7 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 			return &info, nil
 		}
 		// Se o unmarshal falhar, trata como cache miss
-		safeFlag := sanitizeForLog(flagName)
-		// #nosec G706 -- valor sanitizado para log
-		log.Printf("Erro ao desserializar cache para flag %s: %v", safeFlag, err)
+		log.Printf("Erro ao desserializar cache para flag %q: %v", flagName, err)
 	}
 
 	safeFlag := sanitizeForLog(flagName)
@@ -112,8 +111,8 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 	if err == nil {
 		if err := a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err(); err != nil {
 			safeFlag := sanitizeForLog(flagName)
-			// #nosec G706 -- valor sanitizado para log
-			log.Printf("erro ao gravar cache para flag %s: %v", safeFlag, err)
+	// #nosec G706 -- valor sanitizado para log
+	log.Printf("erro ao gravar cache para flag %s: %v", safeFlag, err)
 		}
 	}
 
