@@ -94,7 +94,8 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 			return &info, nil
 		}
 		// Se o unmarshal falhar, trata como cache miss
-		log.Printf("Erro ao desserializar cache para flag %q: %v", flagName, err)
+		safeFlag := sanitizeForLog(flagName)
+		log.Printf("Erro ao desserializar cache para flag %s: %v", safeFlag, err) // #nosec G706
 	}
 
 	safeFlag := sanitizeForLog(flagName)
@@ -171,14 +172,14 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// #nosec G704 -- URL validada por allowlist interna em validateInternalURL
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL.String(), nil)
+	// #nosec G704 -- URL validada por allowlist interna
+	req, err := http.NewRequest(http.MethodGet, safeURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar request para flag-service: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := a.HttpClient.Do(req)
+	resp, err := a.HttpClient.Do(req) // #nosec G704 -- destino interno validado
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar flag-service: %w", err)
 	}
@@ -212,14 +213,14 @@ func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// #nosec G704 -- URL validada por allowlist interna em validateInternalURL
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL.String(), nil)
+	// #nosec G704 -- URL validada por allowlist interna
+	req, err := http.NewRequest(http.MethodGet, safeURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar request para targeting-service: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := a.HttpClient.Do(req)
+	resp, err := a.HttpClient.Do(req) // #nosec G704 -- destino interno validado
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar targeting-service: %w", err)
 	}
