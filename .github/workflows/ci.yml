@@ -8,7 +8,7 @@ on:
 
 env:
   SERVICE_NAME: evaluation-service
-  GO_VERSION: "1.21"
+  GO_VERSION: "1.25.8"
   AWS_REGION: ${{ secrets.AWS_REGION }}
   AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
   ECR_REPOSITORY: evaluation-service
