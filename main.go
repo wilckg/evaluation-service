@@ -113,7 +113,9 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("Serviço de Avaliação (Go) rodando na porta %q", port)
+	safePort := sanitizeForLog(port)
+	// #nosec G706 -- valor sanitizado para log
+	log.Printf("Serviço de Avaliação (Go) rodando na porta %s", safePort)
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}

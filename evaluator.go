@@ -1,18 +1,17 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	neturl "net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -20,6 +19,13 @@ const (
 	// Tempo de vida do cache em segundos
 	CACHE_TTL = 30 * time.Second
 )
+
+func sanitizeForLog(s string) string {
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\t", " ")
+	return s
+}
 
 func validateInternalURL(raw string) (*neturl.URL, error) {
 	parsed, err := neturl.Parse(raw)
@@ -36,14 +42,14 @@ func validateInternalURL(raw string) (*neturl.URL, error) {
 		return nil, fmt.Errorf("host vazio")
 	}
 
-	allowedHosts := map[string]bool{
-		"localhost":         true,
-		"127.0.0.1":         true,
-		"flag-service":      true,
-		"targeting-service": true,
+	allowedHosts := map[string]struct{}{
+		"localhost":         {},
+		"127.0.0.1":         {},
+		"flag-service":      {},
+		"targeting-service": {},
 	}
 
-	if allowedHosts[host] {
+	if _, ok := allowedHosts[host]; ok {
 		return parsed, nil
 	}
 
@@ -81,14 +87,20 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 		// Cache HIT
 		var info CombinedFlagInfo
 		if err := json.Unmarshal([]byte(val), &info); err == nil {
-			log.Printf("Cache HIT para flag %q", flagName)
+			safeFlag := sanitizeForLog(flagName)
+			// #nosec G706 -- valor sanitizado para log
+			log.Printf("Cache HIT para flag %s", safeFlag)
 			return &info, nil
 		}
 		// Se o unmarshal falhar, trata como cache miss
-		log.Printf("Erro ao desserializar cache para flag %q: %v", flagName, err)
+		safeFlag := sanitizeForLog(flagName)
+		// #nosec G706 -- valor sanitizado para log
+		log.Printf("Erro ao desserializar cache para flag %s: %v", safeFlag, err)
 	}
 
-	log.Printf("Cache MISS para flag %q", flagName)
+	safeFlag := sanitizeForLog(flagName)
+	// #nosec G706 -- valor sanitizado para log
+	log.Printf("Cache MISS para flag %s", safeFlag)
 	// 2. Cache MISS - Buscar dos serviços
 	info, err := a.fetchFromServices(flagName)
 	if err != nil {
@@ -99,7 +111,9 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 	jsonData, err := json.Marshal(info)
 	if err == nil {
 		if err := a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err(); err != nil {
-			log.Printf("erro ao gravar cache para flag %q: %v", flagName, err)
+			safeFlag := sanitizeForLog(flagName)
+			// #nosec G706 -- valor sanitizado para log
+			log.Printf("erro ao gravar cache para flag %s: %v", safeFlag, err)
 		}
 	}
 
@@ -133,7 +147,9 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 		return nil, flagErr
 	}
 	if ruleErr != nil {
-		log.Printf("Aviso: nenhuma regra de segmentação encontrada para %q. Usando padrão.", flagName)
+		safeFlag := sanitizeForLog(flagName)
+		// #nosec G706 -- valor sanitizado para log
+		log.Printf("Aviso: nenhuma regra de segmentação encontrada para %s. Usando padrão.", safeFlag)
 	}
 
 	return &CombinedFlagInfo{
@@ -144,7 +160,7 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 
 // fetchFlag (função helper)
 func (a *App) fetchFlag(flagName string) (*Flag, error) {
-	rawURL := fmt.Sprintf("%s/flags/%s", a.FlagServiceURL, flagName)
+	rawURL := fmt.Sprintf("%s/flags/%s", strings.TrimRight(a.FlagServiceURL, "/"), neturl.PathEscape(flagName))
 
 	safeURL, err := validateInternalURL(rawURL)
 	if err != nil {
@@ -152,7 +168,12 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 	}
 
 	apiKey := os.Getenv("SERVICE_API_KEY")
-	req, err := http.NewRequest(http.MethodGet, safeURL.String(), nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// #nosec G704 -- URL validada por allowlist interna em validateInternalURL
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar request para flag-service: %w", err)
 	}
@@ -171,13 +192,8 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 		return nil, fmt.Errorf("flag-service retornou status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao ler resposta do flag-service: %w", err)
-	}
-
 	var flag Flag
-	if err := json.Unmarshal(body, &flag); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&flag); err != nil {
 		return nil, fmt.Errorf("erro ao desserializar resposta do flag-service: %w", err)
 	}
 
@@ -185,7 +201,7 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 }
 
 func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
-	rawURL := fmt.Sprintf("%s/rules/%s", a.TargetingServiceURL, flagName)
+	rawURL := fmt.Sprintf("%s/rules/%s", strings.TrimRight(a.TargetingServiceURL, "/"), neturl.PathEscape(flagName))
 
 	safeURL, err := validateInternalURL(rawURL)
 	if err != nil {
@@ -193,7 +209,12 @@ func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
 	}
 
 	apiKey := os.Getenv("SERVICE_API_KEY")
-	req, err := http.NewRequest(http.MethodGet, safeURL.String(), nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// #nosec G704 -- URL validada por allowlist interna em validateInternalURL
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar request para targeting-service: %w", err)
 	}
@@ -212,13 +233,8 @@ func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
 		return nil, fmt.Errorf("targeting-service retornou status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao ler resposta do targeting-service: %w", err)
-	}
-
 	var rule TargetingRule
-	if err := json.Unmarshal(body, &rule); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&rule); err != nil {
 		return nil, fmt.Errorf("erro ao desserializar resposta do targeting-service: %w", err)
 	}
 
@@ -241,7 +257,9 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 		// Converte o 'value' (que é interface{}) para float64
 		percentage, ok := rule.Value.(float64)
 		if !ok {
-			log.Printf("Erro: valor da regra de porcentagem não é um número para a flag %q", info.Flag.Name)
+			safeFlag := sanitizeForLog(info.Flag.Name)
+			// #nosec G706 -- valor sanitizado para log
+			log.Printf("Erro: valor da regra de porcentagem não é um número para a flag %s", safeFlag)
 			return false
 		}
 
