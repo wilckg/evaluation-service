@@ -173,7 +173,7 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 	defer cancel()
 
 	// #nosec G704 -- URL validada por allowlist interna
-	req, err := http.NewRequest(http.MethodGet, safeURL.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar request para flag-service: %w", err)
 	}
@@ -214,7 +214,7 @@ func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
 	defer cancel()
 
 	// #nosec G704 -- URL validada por allowlist interna
-	req, err := http.NewRequest(http.MethodGet, safeURL.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, safeURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao criar request para targeting-service: %w", err)
 	}
