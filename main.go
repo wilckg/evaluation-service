@@ -102,8 +102,14 @@ func main() {
 
 	// --- Rotas ---
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", app.healthHandler)
-	mux.HandleFunc("/evaluate", app.evaluationHandler)
+	mux.Handle(
+    	"/health",
+    	otelhttp.NewHandler(http.HandlerFunc(app.healthHandler), "GET /health"),
+	)
+	mux.Handle(
+		"/evaluate",
+		otelhttp.NewHandler(http.HandlerFunc(app.evaluationHandler), "POST /evaluate"),
+	)
 
 	server := &http.Server{
 		Addr:         ":" + port,
