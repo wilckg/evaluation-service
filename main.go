@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Contexto global para o Redis
@@ -103,8 +104,8 @@ func main() {
 	// --- Rotas ---
 	mux := http.NewServeMux()
 	mux.Handle(
-    	"/health",
-    	otelhttp.NewHandler(http.HandlerFunc(app.healthHandler), "GET /health"),
+		"/health",
+		otelhttp.NewHandler(http.HandlerFunc(app.healthHandler), "GET /health"),
 	)
 	mux.Handle(
 		"/evaluate",
